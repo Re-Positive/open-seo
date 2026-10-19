@@ -19,7 +19,10 @@ Spec: Re-Positive/seo-engine#12.
    die levert de AI OS zelf.
    - Niet onder het basispad (buiten scope, staat uit bij ons): de chatagent SAM (`/agents/...`), de
      MCP-server (`/mcp`) en de OAuth-toestemming voor MCP.
-2. **Adres van DataForSEO instelbaar**: volgt in seo-engine#16.
+2. **Adres van DataForSEO instelbaar** (`schil: adres DataForSEO instelbaar`, seo-engine#16). Met
+   `DATAFORSEO_API_URL` en `DATAFORSEO_SANDBOX_URL` gaan alle calls naar de kostenmeter. Het lezen
+   gebeurt in een eigen bestand (`src/server/lib/dataforseo/aios-adres.ts`), zodat hun tests die
+   `runtime-env` nadoen ongemoeid blijven. Zonder die variabelen werkt het zoals upstream.
 3. **Servicetoken** (`schil: servicetoken van Cloudflare Access als vaste gebruiker`, seo-engine#14).
    De SEO-poort komt binnen met een Access-servicetoken. Dat JWT heeft geen sub en geen e-mail, alleen
    `common_name`; open-seo weigerde het. Nu wordt het een vaste gebruiker
@@ -42,7 +45,7 @@ node aios/uitrol/uitrol.ts nieuwe klant <client_id>    # bv. 86c7h8f96 voor Re:P
   `SEO_<ID>_ACCESS_CLIENT_SECRET`.
 - De Access-applicatie laat alleen het servicetoken van die klant door; de deploy gebruikt die app
   (`TEAM_DOMAIN` + `POLICY_AUD`) in plaats van de e-mailpolicy van open-seo.
-- De installatie krijgt geen DataForSEO-sleutel: zoekacties werken pas met de kostenmeter (#16).
+- De installatie krijgt nooit onze DataForSEO-sleutel, maar een klanttoken en het adres van de kostenmeter.
 - Telemetrie staat uit. Herhalen mag: wat er al staat, blijft staan.
 - Vanuit een agent-sessie blokkeert de classifier het deployen; draai hem dan via het wizard-paneel
   (actie op klik) of in een eigen terminal.
@@ -68,6 +71,31 @@ pnpm exec playwright test -c aios/playwright.config.ts
   `/seo`, en er gaat geen verzoek naar de root.
 
 Draaien: `pnpm exec playwright test -c aios/playwright.config.ts` (bouwt eerst, duurt ongeveer een minuut).
+
+## Kostenmeter
+
+`aios/meter/` is een eigen Cloudflare Worker, `aios-seo-meter.repositive.workers.dev`, met een eigen
+`package.json` los van open-seo. Elke installatie stuurt er zijn DataForSEO-calls heen. De meter:
+
+- herkent de klant aan het klanttoken, `base64(<client_id>:<HMAC onder SEO_METER_SLEUTEL>)`, zonder
+  een tokenlijst;
+- stuurt de call door met onze sleutel;
+- boekt elke taak met `cost > 0` in `seo.grootboek` op de portal-Supabase. Dat boeken gebeurt na het
+  antwoord (`waitUntil`). Gratis calls en de sandbox worden niet geboekt.
+
+Het grootboek is append-only: een trigger weigert update, delete en truncate. De rol `seo_meter` mag
+alleen invoegen (RLS). De Worker bereikt Supabase via Hyperdrive, met `verify-full` tegen de CA van
+Supabase (`supabase-ca.pem`).
+
+Uitrollen, eenmalig en daarna herhaalbaar:
+
+```bash
+node aios/meter/uitrol-meter.ts sleutels   # SEO_METER_SLEUTEL en SEO_METER_DB_WACHTWOORD in Doppler
+bash aios/meter/grootboek-db.sh            # grootboek en rol op de portal-Supabase
+node aios/meter/uitrol-meter.ts            # CA, Hyperdrive, Worker met secrets, SEO_METER_URL
+```
+
+Testen: `cd aios/meter && npm install && npm test` (naad 2: nep-DataForSEO en een wegwerp-Postgres).
 
 ## Licentie
 
