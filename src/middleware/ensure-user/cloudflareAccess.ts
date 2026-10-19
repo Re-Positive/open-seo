@@ -87,8 +87,23 @@ export async function resolveCloudflareAccessContext(
     throw classifyAccessVerificationError(error);
   }
 
-  const userId = typeof payload.sub === "string" ? payload.sub : null;
-  const userEmail = typeof payload.email === "string" ? payload.email : null;
+  // AI OS: the SEO gateway reaches this deployment with an Access service
+  // token. Its JWT has no person (empty sub, no email), only common_name; the
+  // Access policy is still the boundary, so it gets its own fixed user.
+  const serviceToken =
+    !payload.sub && typeof payload.common_name === "string"
+      ? payload.common_name
+      : null;
+  const userId = serviceToken
+    ? `servicetoken-${serviceToken}`
+    : typeof payload.sub === "string"
+      ? payload.sub
+      : null;
+  const userEmail = serviceToken
+    ? `${serviceToken}@servicetoken.invalid`
+    : typeof payload.email === "string"
+      ? payload.email
+      : null;
 
   if (!userId || !userEmail) {
     throw new AppError("UNAUTHENTICATED");
