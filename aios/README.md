@@ -65,11 +65,39 @@ Na de uitrol: `pnpm exec playwright test -c aios/playwright.live.config.ts` toet
 ## Bijwerken naar een nieuwe versie van open-seo
 
 ```bash
-git fetch upstream --tags
-git checkout aios
-git merge <nieuwe-tag>        # conflicten zitten alleen in bestanden met een schil:-commit
-pnpm exec tsc --noEmit && pnpm exec vitest run
-pnpm exec playwright test -c aios/playwright.config.ts
+node aios/uitrol/uitrol.ts bijwerken <tag>     # bv. v0.1.14
+```
+
+`bijwerken` (seo-engine#20) doet in deze volgorde, en stopt bij de eerste fout:
+
+1. Toetst dat de fork op `aios` staat met een schone werkmap, haalt `upstream --tags` op en merget de
+   tag. Botst de merge, dan draait hij hem terug en noemt hij de bestanden. Conflicten horen alleen in
+   bestanden met een `schil:`-commit te zitten.
+2. `tsc --noEmit` en `vitest run`.
+3. De woordenlijst: `open-seo-lokaal/schil/teksten.mjs --schrijf` zet nieuwe Engelse teksten met een lege
+   waarde in `nl.json`. Vertaal ze daar en maak daarna `public/seo-schil/nl.js` in ai-os-beheer opnieuw.
+4. Uitrollen bij Re:Positive (`86c7h8f96`) en de rooktest (`aios/tests-live/rooktest.spec.ts`).
+5. Slaagt die, dan dezelfde build bij de andere klanten uit `seo.klant`. Faalt hij, dan blijven zij op
+   de vorige versie.
+6. De fork naar origin, en de top 15 van de gemiste teksten.
+
+De **rooktest** loopt door de SEO-poort op os.resketch.nl, met een sessie voor `AIOS_EMAIL` (standaard
+rex@repositive.nl) die `aios/uitrol/aios.ts` maakt. Hij opent elke pagina uit het SEO-menu: er mag geen
+foutscherm en nergens "OpenSEO" staan. Daarna zoekt hij op `leadgeneratie`. open-seo houdt dat resultaat 24 uur in zijn
+cache, dus hij kost hoogstens één betaalde call per dag. Los draaien:
+`pnpm exec playwright test -c aios/playwright.live.config.ts rooktest`.
+
+Op 19-10-2026 is de keten één keer echt doorlopen met `v0.1.13`. Er was geen nieuwere release, dus de
+merge veranderde niets; de rest van de keten heeft wel echt gedraaid.
+
+## Gemiste teksten
+
+De schil meldt Engelse teksten die een gebruiker zag aan de SEO-poort, en die zet ze per klant in
+`seo.gemiste_tekst` (seo-engine#21, migratie 014 in ai-os-beheer). `onvertaald` staat in de woordenlijst zonder
+vertaling; `onbekend` staat er niet in. Het overzicht over alle klanten, de vaakst geziene eerst:
+
+```bash
+node aios/uitrol/uitrol.ts gemist [aantal]     # standaard 50
 ```
 
 ## Tests
