@@ -1,0 +1,11 @@
+// De kostenmeter van de module SEO (seo-engine#16). Uitrollen: zie README.md in deze map.
+{
+  "name": "aios-seo-meter",
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "hyperdrive": [{ "binding": "GROOTBOEK", "id": "VUL_IN_DOOR_UITROL" }]
+}
