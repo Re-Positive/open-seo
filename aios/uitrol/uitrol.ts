@@ -3,6 +3,7 @@
 //
 //   node aios/uitrol/uitrol.ts nieuwe klant <client_id>
 //   node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
+//   node aios/uitrol/uitrol.ts bijwerken <tag>
 //
 // Wat `nieuwe klant` doet, en wat bij herhalen gelijk blijft:
 // 1. Klant (naam, site) uit `clients` van het client-dashboard.
@@ -13,6 +14,10 @@
 // 5. Een project per site (NL, nl) in de D1 van de installatie.
 // 6. De Worker-URL naar Doppler, en de toets: zonder token 403, met token laadt /seo.
 // 7. Klant en site in schema seo van de AI OS (seo.klant, seo.site), zodat de SEO-poort ze kent.
+//
+// `bijwerken <tag>` (seo-engine#20) merget een release van open-seo in de fork, draait de tests,
+// zet nieuwe teksten klaar in de woordenlijst, rolt uit bij Re:Positive met de rooktest door de SEO-poort,
+// en pas als die slaagt bij de andere klanten. Daarna gaat de fork naar origin.
 //
 // `nieuwe site` (seo-engine#18) voegt bij een klant met een installatie een site toe: een project in zijn
 // D1, en een rij in seo.site met het project-id. In de AI OS staat hij daarna in het keuzemenu van de
@@ -32,17 +37,9 @@ import {
   stageVan,
 } from "./cloudflare.ts";
 import { klanttoken } from "../meter/meter.ts";
+import { AI_OS, aiOsSql } from "./aios.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-// De AI OS (os.resketch.nl), waar schema seo staat. De database-URL staat in Doppler resketch-ai, en
-// het Doppler-token is per map gescoped: daarom draait psql vanuit die map.
-const AI_OS = fileURLToPath(
-  new URL(
-    "../../../../../02-resketch/OtherWorlds/ai-os-beheer",
-    import.meta.url,
-  ),
-);
-const PSQL = "/opt/homebrew/opt/libpq/bin/psql";
 // DataForSEO: Nederland en Nederlands.
 const NL = { locationCode: 2528, languageCode: "nl" };
 // Waar open-seo de gedeelde werkruimte van een Access-installatie bewaart (delegated-organization.ts).
@@ -153,6 +150,7 @@ function bouwEnDeploy(
   aud: string,
   heeftStateStore: boolean,
   meter: { url: string; token: string },
+  bouwen = true,
 ) {
   const teamDomein = `https://${dopplerGet("CLOUDFLARE_ACCESS_TEAM")}.cloudflareaccess.com`;
   const envBestand = `.env.uitrol-${stage}`;
@@ -177,11 +175,14 @@ function bouwEnDeploy(
     { mode: 0o600 },
   );
   try {
-    draai("pnpm", ["exec", "vite", "build", "--mode", "selfhost"], {
-      AIOS_BASISPAD: "/seo",
-      AUTH_MODE: "cloudflare_access",
-      OPENSEO_TELEMETRY_DISABLED: "1",
-    });
+    // De build is voor elke klant dezelfde; wat per klant verschilt, gaat via het env-bestand mee.
+    if (bouwen) {
+      draai("pnpm", ["exec", "vite", "build", "--mode", "selfhost"], {
+        AIOS_BASISPAD: "/seo",
+        AUTH_MODE: "cloudflare_access",
+        OPENSEO_TELEMETRY_DISABLED: "1",
+      });
+    }
     if (!heeftStateStore) {
       draai("pnpm", ["alchemy", "cloudflare", "bootstrap"], cloudflareEnv);
     }
@@ -233,40 +234,6 @@ async function zorgVoorProject(stage: string, domein: string): Promise<string> {
   );
   if (!project) throw new Error(`Geen project voor ${domein} in ${stage}.`);
   return String(project.id);
-}
-
-// SQL naar schema seo van de AI OS. De waarden gaan als psql-variabelen mee (`:'naam'`), nooit in de
-// tekst van de SQL. Geeft de regels van `returning` terug.
-function aiOsSql(sql: string, waarden: Record<string, string>) {
-  const vars = Object.keys(waarden).flatMap((naam, i) => [
-    "-v",
-    `${naam}=\${${i + 1}}`,
-  ]);
-  const uitkomst = spawnSync(
-    "doppler",
-    [
-      "run",
-      "-p",
-      "resketch-ai",
-      "-c",
-      "prd",
-      "--",
-      "bash",
-      "-c",
-      `exec ${PSQL} "$(scripts/db-url.py "$CLIENT_PORTAL_DB_URL")" -X -q -At -v ON_ERROR_STOP=1 ${vars
-        .map((v) => (v === "-v" ? v : `"${v}"`))
-        .join(" ")}`,
-      "aios-sql",
-      ...Object.values(waarden),
-    ],
-    { cwd: AI_OS, input: sql, encoding: "utf8" },
-  );
-  if (uitkomst.status !== 0) {
-    throw new Error(
-      `schema seo: ${uitkomst.stderr.trim() || `exit ${uitkomst.status}`}`,
-    );
-  }
-  return uitkomst.stdout.trim().split("\n").filter(Boolean);
 }
 
 function registreerKlant(klant: string, naam: string, url: string) {
@@ -358,15 +325,150 @@ async function nieuweSite(klant: string, invoer: string) {
   );
 }
 
+// Re:Positive krijgt een nieuwe versie altijd eerst, met de rooktest (spec #12, seo-engine#20).
+const EERST = "86c7h8f96";
+// De woordenlijst (Engels naar Nederlands) en het script dat de teksten uit de code haalt, uit de proef.
+const WOORDENLIJST = fileURLToPath(
+  new URL("../../../open-seo-lokaal/schil/teksten.mjs", import.meta.url),
+);
+
+function git(args: string[]) {
+  const uitkomst = spawnSync(
+    "git",
+    [
+      "-c",
+      "credential.helper=",
+      "-c",
+      "credential.helper=!gh auth git-credential",
+      ...args,
+    ],
+    { cwd: ROOT, encoding: "utf8" },
+  );
+  if (uitkomst.status !== 0) {
+    throw new Error(`git ${args.join(" ")}: ${uitkomst.stderr.trim()}`);
+  }
+  return uitkomst.stdout.trim();
+}
+
+// Een bestaande installatie opnieuw deployen met de huidige code van de fork.
+async function deployKlant(klant: string, bouwen: boolean) {
+  const installatie = await installatieVan(klant);
+  const hostname = new URL(installatie.url).hostname;
+  const subdomein = hostname.slice(`open-seo-${installatie.stage}.`.length);
+  const apps = await cloudflare<AccessApp[]>("/access/apps");
+  const app = apps.find((a) => a.domain === hostname);
+  if (!app) throw new Error(`Geen Access-applicatie voor ${hostname}.`);
+  console.log(`Uitrollen bij ${klant} (${hostname}).`);
+  bouwEnDeploy(
+    installatie.stage,
+    subdomein,
+    app.aud,
+    true,
+    await meterVoor(klant),
+    bouwen,
+  );
+  await toets(installatie.url, installatie.clientId, installatie.clientSecret);
+}
+
+function rooktest() {
+  const uitkomst = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "playwright",
+      "test",
+      "-c",
+      "aios/playwright.live.config.ts",
+      "rooktest",
+    ],
+    { cwd: ROOT, stdio: "inherit", env: { ...process.env } },
+  );
+  return uitkomst.status === 0;
+}
+
+async function bijwerken(tag: string) {
+  if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+    throw new Error(`Geen release-tag van open-seo: ${tag}`);
+  }
+  if (git(["branch", "--show-current"]) !== "aios") {
+    throw new Error("De fork staat niet op de branch aios.");
+  }
+  if (git(["status", "--porcelain", "--untracked-files=no"])) {
+    throw new Error(
+      "De werkmap van de fork is niet schoon; commit of zet eerst weg.",
+    );
+  }
+
+  // 1. De nieuwe versie in de fork. Conflicten zitten alleen in bestanden met een schil:-commit.
+  git(["fetch", "upstream", "--tags"]);
+  const voor = git(["rev-parse", "HEAD"]);
+  try {
+    git(["merge", "--no-edit", "-m", `aios: open-seo ${tag}`, tag]);
+  } catch (fout) {
+    const botst = spawnSync("git", ["diff", "--name-only", "--diff-filter=U"], {
+      cwd: ROOT,
+      encoding: "utf8",
+    }).stdout.trim();
+    spawnSync("git", ["merge", "--abort"], { cwd: ROOT });
+    throw new Error(
+      `Merge van ${tag} botst, teruggedraaid. Los het met de hand op in:\n${botst || (fout as Error).message}`,
+    );
+  }
+  console.log(
+    voor === git(["rev-parse", "HEAD"])
+      ? `${tag} zat al in de fork; ik rol de huidige code opnieuw uit.`
+      : `${tag} gemerged.`,
+  );
+
+  // 2. Hun tests en de onze, voordat er iets live gaat.
+  draai("pnpm", ["exec", "tsc", "--noEmit"]);
+  draai("pnpm", ["exec", "vitest", "run", "--reporter=dot"]);
+
+  // 3. De woordenlijst: nieuwe Engelse teksten komen leeg in nl.json, klaar om te vertalen.
+  const lijst = spawnSync("node", [WOORDENLIJST, ROOT, "--schrijf"], {
+    encoding: "utf8",
+  });
+  if (lijst.status !== 0) throw new Error(`Woordenlijst: ${lijst.stderr}`);
+  const nieuw = Number(
+    lijst.stdout.match(/nog te vertalen:\s+(\d+)/)?.[1] ?? NaN,
+  );
+
+  // 4. Eerst Re:Positive, met de rooktest door de SEO-poort. Faalt die, dan stopt het hier.
+  await deployKlant(EERST, true);
+  if (!rooktest()) {
+    throw new Error(
+      `De rooktest op Re:Positive faalt met ${tag}. De andere klanten blijven op de vorige versie; ` +
+        `terug bij Re:Positive: git reset --hard ${voor.slice(0, 8)} en opnieuw bijwerken.`,
+    );
+  }
+
+  // 5. Daarna de andere klanten (seo.klant in de AI OS), met dezelfde build.
+  const anderen = aiOsSql(
+    "select client_id from seo.klant where client_id <> :'eerst' order by client_id;",
+    { eerst: EERST },
+  );
+  for (const klant of anderen) await deployKlant(klant, false);
+
+  git(["push", "origin", "aios"]);
+  console.log(
+    `Klaar: ${tag} live bij ${[EERST, ...anderen].join(", ")}. ` +
+      `Woordenlijst: ${nieuw} teksten te vertalen in open-seo-lokaal/schil/nl.json ` +
+      `(daarna public/seo-schil/nl.js in ${AI_OS} opnieuw maken).`,
+  );
+}
+
 const [opdracht, soort, klant, domein] = process.argv.slice(2);
 if (opdracht === "nieuwe" && soort === "klant" && klant) {
   await nieuweKlant(klant);
 } else if (opdracht === "nieuwe" && soort === "site" && klant && domein) {
   await nieuweSite(klant, domein);
+} else if (opdracht === "bijwerken" && soort) {
+  await bijwerken(soort);
 } else {
   console.error(
     "Gebruik: node aios/uitrol/uitrol.ts nieuwe klant <client_id>\n" +
-      "         node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>",
+      "         node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>\n" +
+      "         node aios/uitrol/uitrol.ts bijwerken <tag>",
   );
   process.exit(2);
 }
