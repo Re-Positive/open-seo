@@ -48,6 +48,8 @@ export default defineConfig(({ mode, command }) => {
   // Not via Vite's `base`: Workers static assets are looked up by file path, so the
   // assets themselves move into the base path, and router and server functions follow.
   const aiosBasispad = (env.AIOS_BASISPAD || "").replace(/\/+$/, "");
+  // AI OS (Re:Positive): the public origin of the AI OS, used for OAuth redirects (Google).
+  const aiosOrigin = env.AIOS_ORIGIN ? new URL(env.AIOS_ORIGIN).origin : "";
 
   return {
     // Static files (favicons, manifest) live beside the app code instead of at
@@ -71,6 +73,7 @@ export default defineConfig(({ mode, command }) => {
     },
     define: {
       "import.meta.env.VITE_AIOS_BASISPAD": JSON.stringify(aiosBasispad),
+      "import.meta.env.VITE_AIOS_ORIGIN": JSON.stringify(aiosOrigin),
     },
     build: {
       ...(aiosBasispad ? { assetsDir: `${aiosBasispad.slice(1)}/assets` } : {}),

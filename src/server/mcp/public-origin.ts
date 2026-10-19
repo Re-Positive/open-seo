@@ -1,3 +1,5 @@
+import { AIOS_ORIGIN } from "@/lib/aios-basispad";
+
 function firstHeaderValue(value: string | null) {
   return value?.split(",")[0]?.trim() || null;
 }
@@ -8,6 +10,8 @@ function getForwardedProtocol(request: Request) {
 }
 
 export function getPublicOrigin(request: Request) {
+  // AI OS (Re:Positive): behind the AI OS gateway the public origin is fixed at build time.
+  if (AIOS_ORIGIN) return AIOS_ORIGIN;
   const url = new URL(request.url);
   if (url.protocol === "https:") {
     return url.origin;
