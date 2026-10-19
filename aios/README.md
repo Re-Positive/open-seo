@@ -36,6 +36,7 @@ Spec: Re-Positive/seo-engine#12.
 
 ```bash
 node aios/uitrol/uitrol.ts nieuwe klant <client_id>    # bv. 86c7h8f96 voor Re:Positive
+node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
 ```
 
 - Klant en site komen uit `clients` van het client-dashboard (zelfde `client_id`, ADR-0005 in seo-engine).
@@ -47,6 +48,14 @@ node aios/uitrol/uitrol.ts nieuwe klant <client_id>    # bv. 86c7h8f96 voor Re:P
   (`TEAM_DOMAIN` + `POLICY_AUD`) in plaats van de e-mailpolicy van open-seo.
 - De installatie krijgt nooit onze DataForSEO-sleutel, maar een klanttoken en het adres van de kostenmeter.
 - Telemetrie staat uit. Herhalen mag: wat er al staat, blijft staan.
+- Beide schrijven klant en site naar schema `seo` van de AI OS (`seo.klant`, `seo.site`, in de
+  portal-Supabase van os.resketch.nl). psql draait daarvoor vanuit `02-resketch/OtherWorlds/ai-os-beheer`
+  met Doppler `resketch-ai/prd`, want het Doppler-token is per map gescoped. Waarden gaan als
+  psql-variabelen mee, nooit in de SQL-tekst. Wie de klant ziet (`seo.gebruiker`) blijft handwerk.
+- `nieuwe site` (seo-engine#18) voegt een project (NL, nl) toe in de D1 van een bestaande installatie en
+  zet het project-id in `seo.site`; de SEO-poort toont hem in het keuzemenu van de kopbalk. Het domein
+  wordt schoongemaakt (`domeinVan`, getest in `aios/uitrol/domein.test.ts`). Hij deployt niets, dus de
+  classifier laat hem door.
 - Vanuit een agent-sessie blokkeert de classifier het deployen; draai hem dan via het wizard-paneel
   (actie op klik) of in een eigen terminal.
 

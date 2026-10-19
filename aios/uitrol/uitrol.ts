@@ -2,6 +2,7 @@
 // (seo-engine#12, ADR-0008). Draaien vanuit de root van de fork:
 //
 //   node aios/uitrol/uitrol.ts nieuwe klant <client_id>
+//   node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
 //
 // Wat `nieuwe klant` doet, en wat bij herhalen gelijk blijft:
 // 1. Klant (naam, site) uit `clients` van het client-dashboard.
@@ -11,6 +12,11 @@
 //    met ons eigen Access (TEAM_DOMAIN + POLICY_AUD), dus zonder e-mailpolicy van open-seo.
 // 5. Een project per site (NL, nl) in de D1 van de installatie.
 // 6. De Worker-URL naar Doppler, en de toets: zonder token 403, met token laadt /seo.
+// 7. Klant en site in schema seo van de AI OS (seo.klant, seo.site), zodat de SEO-poort ze kent.
+//
+// `nieuwe site` (seo-engine#18) voegt bij een klant met een installatie een site toe: een project in zijn
+// D1, en een rij in seo.site met het project-id. In de AI OS staat hij daarna in het keuzemenu van de
+// kopbalk (na hoogstens tien minuten, de klantcookie van de poort). Herhalen mag.
 import { spawnSync } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -20,12 +26,23 @@ import {
   dopplerGet,
   dopplerNamen,
   dopplerSet,
+  domeinVan,
+  installatieVan,
   klantVan,
   stageVan,
 } from "./cloudflare.ts";
 import { klanttoken } from "../meter/meter.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+// De AI OS (os.resketch.nl), waar schema seo staat. De database-URL staat in Doppler resketch-ai, en
+// het Doppler-token is per map gescoped: daarom draait psql vanuit die map.
+const AI_OS = fileURLToPath(
+  new URL(
+    "../../../../../02-resketch/OtherWorlds/ai-os-beheer",
+    import.meta.url,
+  ),
+);
+const PSQL = "/opt/homebrew/opt/libpq/bin/psql";
 // DataForSEO: Nederland en Nederlands.
 const NL = { locationCode: 2528, languageCode: "nl" };
 // Waar open-seo de gedeelde werkruimte van een Access-installatie bewaart (delegated-organization.ts).
@@ -187,7 +204,7 @@ function bouwEnDeploy(
   }
 }
 
-async function zorgVoorProject(stage: string, domein: string) {
+async function zorgVoorProject(stage: string, domein: string): Promise<string> {
   await d1Query(
     stage,
     "insert into organization (id, name, slug, created_at) values (?, 'Shared organization', ?, ?) on conflict(id) do nothing",
@@ -209,6 +226,72 @@ async function zorgVoorProject(stage: string, domein: string) {
       domein,
     ],
   );
+  const [project] = await d1Query(
+    stage,
+    "select id from projects where organization_id = ? and domain = ? and archived_at is null order by created_at limit 1",
+    [WERKRUIMTE, domein],
+  );
+  if (!project) throw new Error(`Geen project voor ${domein} in ${stage}.`);
+  return String(project.id);
+}
+
+// SQL naar schema seo van de AI OS. De waarden gaan als psql-variabelen mee (`:'naam'`), nooit in de
+// tekst van de SQL. Geeft de regels van `returning` terug.
+function aiOsSql(sql: string, waarden: Record<string, string>) {
+  const vars = Object.keys(waarden).flatMap((naam, i) => [
+    "-v",
+    `${naam}=\${${i + 1}}`,
+  ]);
+  const uitkomst = spawnSync(
+    "doppler",
+    [
+      "run",
+      "-p",
+      "resketch-ai",
+      "-c",
+      "prd",
+      "--",
+      "bash",
+      "-c",
+      `exec ${PSQL} "$(scripts/db-url.py "$CLIENT_PORTAL_DB_URL")" -X -q -At -v ON_ERROR_STOP=1 ${vars
+        .map((v) => (v === "-v" ? v : `"${v}"`))
+        .join(" ")}`,
+      "aios-sql",
+      ...Object.values(waarden),
+    ],
+    { cwd: AI_OS, input: sql, encoding: "utf8" },
+  );
+  if (uitkomst.status !== 0) {
+    throw new Error(
+      `schema seo: ${uitkomst.stderr.trim() || `exit ${uitkomst.status}`}`,
+    );
+  }
+  return uitkomst.stdout.trim().split("\n").filter(Boolean);
+}
+
+function registreerKlant(klant: string, naam: string, url: string) {
+  aiOsSql(
+    `insert into seo.klant (client_id, naam, installatie_url) values (:'client_id', :'naam', :'url')
+     on conflict (client_id) do update set naam = excluded.naam, installatie_url = excluded.installatie_url
+     returning client_id;`,
+    { client_id: klant, naam, url },
+  );
+}
+
+function registreerSite(klant: string, domein: string, projectId: string) {
+  const [rij] = aiOsSql(
+    `insert into seo.site (client_id, domein, project_id)
+     select :'client_id', :'domein', :'project_id'
+      where exists (select 1 from seo.klant where client_id = :'client_id')
+     on conflict (client_id, domein) do update set project_id = excluded.project_id
+     returning domein || ' ' || project_id;`,
+    { client_id: klant, domein, project_id: projectId },
+  );
+  if (!rij) {
+    throw new Error(
+      `Klant ${klant} staat niet in seo.klant van de AI OS; draai eerst \`nieuwe klant ${klant}\`.`,
+    );
+  }
 }
 
 async function toets(url: string, clientId: string, clientSecret: string) {
@@ -252,21 +335,38 @@ async function nieuweKlant(klant: string) {
     workers.some((w) => w.id === "alchemy-state-store"),
     await meterVoor(klant),
   );
-  await zorgVoorProject(stage, domein);
+  const projectId = await zorgVoorProject(stage, domein);
 
   const namen = dopplerNamen(klant);
   const url = `https://${hostname}`;
   dopplerSet(namen.url, url);
   await toets(url, dopplerGet(namen.clientId), dopplerGet(namen.clientSecret));
+  registreerKlant(klant, naam, url);
+  registreerSite(klant, domein, projectId);
   console.log(
-    `Klaar: ${url}/seo (Doppler: ${namen.url}, ${namen.clientId}, ${namen.clientSecret}).`,
+    `Klaar: ${url}/seo (Doppler: ${namen.url}, ${namen.clientId}, ${namen.clientSecret}; site ${domein} in seo.site).`,
   );
 }
 
-const [opdracht, soort, klant] = process.argv.slice(2);
+async function nieuweSite(klant: string, invoer: string) {
+  const domein = domeinVan(invoer);
+  const installatie = await installatieVan(klant);
+  const projectId = await zorgVoorProject(installatie.stage, domein);
+  registreerSite(klant, domein, projectId);
+  console.log(
+    `Klaar: site ${domein} bij ${klant}, project ${projectId} (${installatie.url}/seo/p/${projectId}).`,
+  );
+}
+
+const [opdracht, soort, klant, domein] = process.argv.slice(2);
 if (opdracht === "nieuwe" && soort === "klant" && klant) {
   await nieuweKlant(klant);
+} else if (opdracht === "nieuwe" && soort === "site" && klant && domein) {
+  await nieuweSite(klant, domein);
 } else {
-  console.error("Gebruik: node aios/uitrol/uitrol.ts nieuwe klant <client_id>");
+  console.error(
+    "Gebruik: node aios/uitrol/uitrol.ts nieuwe klant <client_id>\n" +
+      "         node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>",
+  );
   process.exit(2);
 }

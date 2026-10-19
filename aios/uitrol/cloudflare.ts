@@ -128,8 +128,24 @@ export async function klantVan(klant: string) {
     throw new Error(
       `Klant ${klant} (${rij.name}) heeft geen website in clients.`,
     );
-  const domein = new URL(
-    rij.website.includes("://") ? rij.website : `https://${rij.website}`,
-  ).hostname.replace(/^www\./, "");
-  return { naam: rij.name, domein };
+  return { naam: rij.name, domein: domeinVan(rij.website) };
+}
+
+/** Het domein van een site zoals de AI OS het bewaart (`seo.site.domein`): kleine letters, zonder www. */
+export function domeinVan(invoer: string) {
+  const tekst = invoer.trim();
+  let domein: string;
+  try {
+    domein = new URL(
+      tekst.includes("://") ? tekst : `https://${tekst}`,
+    ).hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
+  } catch {
+    throw new Error(`Geen geldig domein: ${invoer}`);
+  }
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domein)) {
+    throw new Error(`Geen geldig domein: ${invoer}`);
+  }
+  return domein;
 }
