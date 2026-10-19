@@ -118,6 +118,11 @@ async function uitrol() {
     dopplerGet("DATAFORSEO_API_KEY"),
   );
   wrangler(["secret", "put", "METER_SLEUTEL"], dopplerGet("SEO_METER_SLEUTEL"));
+  // Budgetmeldingen (seo-engine#17) gaan naar de Chat-space van Rex en Donny.
+  wrangler(
+    ["secret", "put", "CHAT_WEBHOOK"],
+    dopplerGet("REX_GOOGLE_CHAT_WEBHOOK"),
+  );
 
   const { subdomain } = await cloudflare<{ subdomain: string }>(
     "/workers/subdomain",

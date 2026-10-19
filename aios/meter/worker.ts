@@ -7,6 +7,7 @@ import { meter } from "./meter.ts";
 type Env = {
   DATAFORSEO_API_KEY: string;
   METER_SLEUTEL: string;
+  CHAT_WEBHOOK: string;
   GROOTBOEK: { connectionString: string };
 };
 
@@ -31,6 +32,15 @@ export default {
       meterSleutel: env.METER_SLEUTEL,
       sql,
       naBoeking: (boeking) => ctx.waitUntil(boeking.finally(() => sql.end())),
+      meld: async (tekst) => {
+        const r = await fetch(env.CHAT_WEBHOOK, {
+          method: "POST",
+          headers: { "content-type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ text: tekst }),
+        });
+        if (!r.ok)
+          console.error(`melding naar Google Chat mislukt: ${r.status}`);
+      },
     });
   },
 };

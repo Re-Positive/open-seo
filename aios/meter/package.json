@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Kostenmeter voor DataForSEO van de AI OS (Re-Positive/seo-engine#16). Eigen package, los van open-seo.",
   "scripts": {
-    "test": "node --test --experimental-strip-types meter.test.ts"
+    "test": "node --test --experimental-strip-types meter.test.ts budget.test.ts"
   },
   "dependencies": {
     "postgres": "3.4.7"

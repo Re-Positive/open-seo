@@ -51,12 +51,55 @@ revoke all on seo.grootboek from public;
 grant usage on schema seo to seo_meter;
 grant insert (client_id, endpoint, bedrag, taak_id) on seo.grootboek to seo_meter;
 
+-- Zoekdatabudget (seo-engine#17): per klant een bedrag per kalendermaand (Europe/Amsterdam), en welke
+-- drempelmeldingen (80% en 100%) deze maand al uitgingen. De meter leest en schrijft dit alleen via
+-- de twee functies hieronder (security definer), niet rechtstreeks.
+create table if not exists seo.budget (
+  client_id text primary key check (client_id ~ '^[A-Za-z0-9_]+$'),
+  maandbedrag numeric(10, 2) not null check (maandbedrag >= 0),
+  gewijzigd_op timestamptz not null default now()
+);
+create table if not exists seo.budget_melding (
+  client_id text not null,
+  maand date not null,
+  drempel int not null check (drempel in (80, 100)),
+  gemeld_op timestamptz not null default now(),
+  primary key (client_id, maand, drempel)
+);
+alter table seo.budget enable row level security;
+alter table seo.budget_melding enable row level security;
+revoke all on seo.budget, seo.budget_melding from public;
+
+-- Budget en verbruik van deze maand. Budget null betekent: geen budget, dus dicht.
+create or replace function seo.budget_stand(p_client text)
+  returns table (budget numeric, verbruikt numeric)
+  language sql stable security definer set search_path = pg_catalog, pg_temp as $$
+  select (select b.maandbedrag from seo.budget b where b.client_id = p_client),
+         coalesce((select sum(g.bedrag) from seo.grootboek g
+                    where g.client_id = p_client
+                      and g.geboekt_op >= (date_trunc('month', now() at time zone 'Europe/Amsterdam') at time zone 'Europe/Amsterdam')), 0)
+$$;
+
+-- True als deze drempel deze maand nog niet gemeld was (en nu als gemeld staat).
+create or replace function seo.meld_drempel(p_client text, p_drempel int)
+  returns boolean language plpgsql security definer set search_path = pg_catalog, pg_temp as $$
+begin
+  insert into seo.budget_melding (client_id, maand, drempel)
+  values (p_client, (date_trunc('month', now() at time zone 'Europe/Amsterdam'))::date, p_drempel)
+  on conflict do nothing;
+  return found;
+end $$;
+
+revoke all on function seo.budget_stand(text), seo.meld_drempel(text, int) from public;
+grant execute on function seo.budget_stand(text), seo.meld_drempel(text, int) to seo_meter;
+
 do $$
 declare rol text;
 begin
   foreach rol in array array['anon', 'authenticated'] loop
     if exists (select 1 from pg_roles where rolname = rol) then
-      execute format('revoke all on seo.grootboek from %I', rol);
+      execute format('revoke all on seo.grootboek, seo.budget, seo.budget_melding from %I', rol);
+      execute format('revoke all on function seo.budget_stand(text), seo.meld_drempel(text, int) from %I', rol);
     end if;
   end loop;
 end $$;
