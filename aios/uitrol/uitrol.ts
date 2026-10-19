@@ -4,6 +4,7 @@
 //   node aios/uitrol/uitrol.ts nieuwe klant <client_id>
 //   node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
 //   node aios/uitrol/uitrol.ts bijwerken <tag>
+//   node aios/uitrol/uitrol.ts gemist [aantal]
 //
 // Wat `nieuwe klant` doet, en wat bij herhalen gelijk blijft:
 // 1. Klant (naam, site) uit `clients` van het client-dashboard.
@@ -450,11 +451,33 @@ async function bijwerken(tag: string) {
   for (const klant of anderen) await deployKlant(klant, false);
 
   git(["push", "origin", "aios"]);
+  console.log("\nDe meest geziene Engelse teksten (alle klanten):");
+  gemist(15);
   console.log(
     `Klaar: ${tag} live bij ${[EERST, ...anderen].join(", ")}. ` +
       `Woordenlijst: ${nieuw} teksten te vertalen in open-seo-lokaal/schil/nl.json ` +
       `(daarna public/seo-schil/nl.js in ${AI_OS} opnieuw maken).`,
   );
+}
+
+// Welke Engelse teksten gebruikers het vaakst zagen, over alle klanten heen (seo-engine#21). De schil
+// meldt ze aan de SEO-poort, die ze per klant in seo.gemiste_tekst zet (migratie 014 in de AI OS).
+// "onvertaald" staat in de woordenlijst zonder vertaling; "onbekend" staat er niet in.
+function gemist(aantal: number) {
+  const rijen = aiOsSql(
+    `select aantal || chr(9) || klanten || chr(9) || soort || chr(9) || tekst
+       from seo.gemist_overzicht
+      order by aantal desc, klanten desc, tekst
+      limit :'aantal';`,
+    { aantal: String(aantal) },
+  );
+  if (!rijen.length) {
+    console.log("Geen gemiste teksten gemeld.");
+    return rijen;
+  }
+  console.log("gezien\tklanten\tsoort\ttekst");
+  for (const rij of rijen) console.log(rij);
+  return rijen;
 }
 
 const [opdracht, soort, klant, domein] = process.argv.slice(2);
@@ -464,11 +487,14 @@ if (opdracht === "nieuwe" && soort === "klant" && klant) {
   await nieuweSite(klant, domein);
 } else if (opdracht === "bijwerken" && soort) {
   await bijwerken(soort);
+} else if (opdracht === "gemist" && (!soort || /^\d+$/.test(soort))) {
+  gemist(Number(soort ?? 50));
 } else {
   console.error(
     "Gebruik: node aios/uitrol/uitrol.ts nieuwe klant <client_id>\n" +
       "         node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>\n" +
-      "         node aios/uitrol/uitrol.ts bijwerken <tag>",
+      "         node aios/uitrol/uitrol.ts bijwerken <tag>\n" +
+      "         node aios/uitrol/uitrol.ts gemist [aantal]",
   );
   process.exit(2);
 }
