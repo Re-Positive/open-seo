@@ -75,6 +75,9 @@ export function dopplerNamen(klant: string) {
     url: `SEO_${id}_URL`,
     clientId: `SEO_${id}_ACCESS_CLIENT_ID`,
     clientSecret: `SEO_${id}_ACCESS_CLIENT_SECRET`,
+    // Versleutelt de Google-tokens in de installatie (BETTER_AUTH_SECRET). Blijft gelijk over deploys:
+    // een nieuw geheim maakt elke opgeslagen koppeling onleesbaar.
+    authSecret: `SEO_${id}_AUTH_SECRET`,
   };
 }
 

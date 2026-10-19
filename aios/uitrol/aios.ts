@@ -13,6 +13,8 @@ export const AI_OS = fileURLToPath(
   ),
 );
 const PSQL = "/opt/homebrew/opt/libpq/bin/psql";
+/** Waar de AI OS de installaties toont (de SEO-poort); ook het adres van de Google-redirects. */
+export const AI_OS_ORIGIN = "https://os.resketch.nl";
 
 const DATABASE = {
   // Het project AI OS, eigenaarsrol, al in pooler-vorm.

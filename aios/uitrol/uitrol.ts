@@ -24,6 +24,7 @@
 // D1, en een rij in seo.site met het project-id. In de AI OS staat hij daarna in het keuzemenu van de
 // kopbalk (na hoogstens tien minuten, de klantcookie van de poort). Herhalen mag.
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -38,7 +39,7 @@ import {
   stageVan,
 } from "./cloudflare.ts";
 import { klanttoken } from "../meter/meter.ts";
-import { AI_OS, aiOsSql } from "./aios.ts";
+import { AI_OS, AI_OS_ORIGIN, aiOsSql } from "./aios.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // DataForSEO: Nederland en Nederlands.
@@ -145,12 +146,33 @@ async function meterVoor(klant: string) {
   return { url, token: await klanttoken(sleutel, klant) };
 }
 
+// Search Console en GA4 (seo-engine#22): één Google-client voor alle klanten (project ai-os-512117 onder
+// info@resketch.nl), met de redirect via os.resketch.nl. De tokens versleutelt de installatie met een
+// eigen geheim per klant, dat hier één keer ontstaat en daarna gelijk blijft.
+function googleVoor(klant: string) {
+  const clientId = dopplerGet("SEO_GOOGLE_CLIENT_ID");
+  const clientSecret = dopplerGet("SEO_GOOGLE_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return [];
+  const naam = dopplerNamen(klant).authSecret;
+  let authSecret = dopplerGet(naam);
+  if (!authSecret) {
+    authSecret = randomBytes(32).toString("hex");
+    dopplerSet(naam, authSecret);
+  }
+  return [
+    `GOOGLE_CLIENT_ID=${clientId}`,
+    `GOOGLE_CLIENT_SECRET=${clientSecret}`,
+    `BETTER_AUTH_SECRET=${authSecret}`,
+  ];
+}
+
 function bouwEnDeploy(
   stage: string,
   subdomein: string,
   aud: string,
   heeftStateStore: boolean,
   meter: { url: string; token: string },
+  google: string[],
   bouwen = true,
 ) {
   const teamDomein = `https://${dopplerGet("CLOUDFLARE_ACCESS_TEAM")}.cloudflareaccess.com`;
@@ -171,6 +193,7 @@ function bouwEnDeploy(
       `POLICY_AUD=${aud}`,
       `WORKERS_SUBDOMAIN=${subdomein}`,
       "OPENSEO_TELEMETRY_DISABLED=1",
+      ...google,
       "",
     ].join("\n"),
     { mode: 0o600 },
@@ -180,6 +203,7 @@ function bouwEnDeploy(
     if (bouwen) {
       draai("pnpm", ["exec", "vite", "build", "--mode", "selfhost"], {
         AIOS_BASISPAD: "/seo",
+        AIOS_ORIGIN: AI_OS_ORIGIN,
         AUTH_MODE: "cloudflare_access",
         OPENSEO_TELEMETRY_DISABLED: "1",
       });
@@ -312,6 +336,7 @@ async function nieuweKlant(klant: string, eersteSite?: string) {
     app.aud,
     workers.some((w) => w.id === "alchemy-state-store"),
     await meterVoor(klant),
+    googleVoor(klant),
   );
   const projectId = await zorgVoorProject(stage, domein);
 
@@ -376,6 +401,7 @@ async function deployKlant(klant: string, bouwen: boolean) {
     app.aud,
     true,
     await meterVoor(klant),
+    googleVoor(klant),
     bouwen,
   );
   await toets(installatie.url, installatie.clientId, installatie.clientSecret);
