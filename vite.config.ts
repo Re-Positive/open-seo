@@ -44,6 +44,10 @@ export default defineConfig(({ mode, command }) => {
     env.BETTER_AUTH_URL ? new URL(env.BETTER_AUTH_URL).hostname : undefined,
   ].filter((host): host is string => Boolean(host));
   const emitSourcemaps = env.POSTHOG_SOURCEMAPS === "true";
+  // AI OS (Re:Positive): serve the app under a base path (e.g. /seo) inside the AI OS.
+  // Not via Vite's `base`: Workers static assets are looked up by file path, so the
+  // assets themselves move into the base path, and router and server functions follow.
+  const aiosBasispad = (env.AIOS_BASISPAD || "").replace(/\/+$/, "");
 
   return {
     // Static files (favicons, manifest) live beside the app code instead of at
@@ -65,7 +69,11 @@ export default defineConfig(({ mode, command }) => {
       allowedHosts,
       port,
     },
+    define: {
+      "import.meta.env.VITE_AIOS_BASISPAD": JSON.stringify(aiosBasispad),
+    },
     build: {
+      ...(aiosBasispad ? { assetsDir: `${aiosBasispad.slice(1)}/assets` } : {}),
       sourcemap: emitSourcemaps,
       outDir: emitSourcemaps ? "dist-sourcemaps" : "dist",
     },
@@ -99,7 +107,14 @@ export default defineConfig(({ mode, command }) => {
         ],
       }),
       tsConfigPaths(),
-      tanstackStart(),
+      tanstackStart(
+        aiosBasispad
+          ? {
+              router: { basepath: aiosBasispad },
+              serverFns: { base: `${aiosBasispad}/_serverFn` },
+            }
+          : undefined,
+      ),
       viteReact(),
       tailwindcss(),
     ],

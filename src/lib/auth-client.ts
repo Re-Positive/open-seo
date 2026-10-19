@@ -8,9 +8,11 @@ import { captureClientEvent, resetAnalyticsUser } from "@/client/lib/posthog";
 import { userAdditionalFields } from "@/lib/auth-options";
 import { orgAccessControl, orgRoles } from "@/lib/org-permissions";
 import { getSignInHrefForLocation } from "@/lib/auth-redirect";
+import { AIOS_BASISPAD } from "@/lib/aios-basispad";
 
 export const authClient = createAuthClient({
   baseURL: typeof window !== "undefined" ? window.location.origin : "",
+  basePath: `${AIOS_BASISPAD}/api/auth`,
   plugins: [
     apiKeyClient(),
     // ac/roles must match the server plugin exactly, otherwise the client's

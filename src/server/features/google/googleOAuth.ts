@@ -1,4 +1,5 @@
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
+import { AIOS_BASISPAD } from "@/lib/aios-basispad";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -110,7 +111,7 @@ function getRedirectUri(
   publicOrigin: string,
   integration: GoogleOAuthIntegration,
 ) {
-  return `${publicOrigin}${integration.callbackPath}`;
+  return `${publicOrigin}${AIOS_BASISPAD}${integration.callbackPath}`;
 }
 
 /** Token encryption matches Better Auth's own `account` rows so grants

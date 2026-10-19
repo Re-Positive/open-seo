@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { AIOS_BASISPAD } from "@/lib/aios-basispad";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
@@ -135,6 +136,7 @@ function createAuth() {
 
   const auth = betterAuth({
     baseURL: baseUrl,
+    basePath: `${AIOS_BASISPAD}/api/auth`,
     secret: getHostedSecret(),
     logger: {
       log: (level, message, ...args: unknown[]) => {

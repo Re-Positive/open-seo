@@ -93,6 +93,8 @@ interface ImportMetaEnv {
   readonly POSTHOG_HOST?: string;
   readonly TURNSTILE_SITE_KEY?: string;
   readonly VITE_E2E_DOMAIN_FIXTURES?: string;
+  // AI OS (Re:Positive): base path inside the AI OS, see src/lib/aios-basispad.ts.
+  readonly VITE_AIOS_BASISPAD?: string;
   readonly VITE_E2E_KEYWORD_FIXTURES?: string;
 }
 
