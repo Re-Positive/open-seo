@@ -95,7 +95,14 @@ bash aios/meter/grootboek-db.sh            # grootboek en rol op de portal-Supab
 node aios/meter/uitrol-meter.ts            # CA, Hyperdrive, Worker met secrets, SEO_METER_URL
 ```
 
-Testen: `cd aios/meter && npm install && npm test` (naad 2: nep-DataForSEO en een wegwerp-Postgres).
+**Zoekdatabudget** (seo-engine#17) werkt per klant, per kalendermaand, en wordt ingesteld met
+`bash aios/meter/budget.sh <client_id> <dollar>`. Zonder budget of met een vol budget gaat er geen
+betaalde call door. Gratis naslag en de sandbox gaan altijd door. Een geweigerde call krijgt een 401
+in DataForSEO-vorm; de schil op os.resketch.nl toont dan "Het SEO-budget van deze maand is op". Bij 80%
+en bij 100% gaat er per maand één melding naar Google Chat (`REX_GOOGLE_CHAT_WEBHOOK`). Calls die
+tegelijk lopen, kunnen samen iets over het budget heen gaan. De proefklant `rooktest` heeft budget 0.
+
+Testen: `cd aios/meter && npm install && npm test` (`meter.test.ts`, `budget.test.ts`; naad 2: nep-DataForSEO en een wegwerp-Postgres).
 
 ## Licentie
 
