@@ -4,10 +4,14 @@ vi.mock("@/server/lib/runtime-env", () => ({
   getRequiredEnvValue: vi.fn(async () => "encoded-credentials"),
 }));
 
-import { dataforseoPost } from "@/server/lib/dataforseo/core";
+import {
+  dataforseoPost,
+  dataforseoPostResponse,
+} from "@/server/lib/dataforseo/core";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("DataForSEO transport", () => {
@@ -51,4 +55,23 @@ describe("DataForSEO transport", () => {
       expect(fetchMock).toHaveBeenCalledOnce();
     },
   );
+
+  // AI OS (schil: adres DataForSEO instelbaar): every call goes through our cost meter.
+  it("sends every call to DATAFORSEO_API_URL when it is set", async () => {
+    vi.stubEnv("DATAFORSEO_API_URL", "https://meter.example/");
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () =>
+        Response.json({ status_code: 20000, tasks: [] }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await dataforseoPost("/v3/backlinks/summary/live", []);
+    await dataforseoPostResponse("/v3/on_page/lighthouse/live/json", []);
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://meter.example/v3/backlinks/summary/live",
+      "https://meter.example/v3/on_page/lighthouse/live/json",
+    ]);
+  });
 });

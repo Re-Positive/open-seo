@@ -1,5 +1,6 @@
 import { AppError } from "@/server/lib/errors";
 import { getRequiredEnvValue } from "@/server/lib/runtime-env";
+import { dataforseoBase } from "@/server/lib/dataforseo/aios-adres";
 import type { ErrorCode } from "@/shared/error-codes";
 // No runtime cycle: envelope.ts imports only the DataforseoErrorClassifier
 // type from here.
@@ -177,15 +178,18 @@ async function requestDataforseo<TTask extends DataforseoTaskLike>(
     options.classify,
     options.maxServerErrorRetries,
   );
-  const response = await doFetch(`${options.baseUrl ?? API_BASE}${path}`, {
-    method,
-    headers: {
-      Accept: "application/json",
-      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+  const response = await doFetch(
+    `${options.baseUrl ?? (await dataforseoBase(API_BASE))}${path}`,
+    {
+      method,
+      headers: {
+        Accept: "application/json",
+        ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+      },
+      body: method === "POST" ? JSON.stringify(body) : undefined,
+      signal: options.signal,
     },
-    body: method === "POST" ? JSON.stringify(body) : undefined,
-    signal: options.signal,
-  });
+  );
   const text = await response.text();
   if (text === "") return null;
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the task type is the caller's claim about the payload; billing metadata and item fields are validated downstream (envelope.ts + section Zod schemas)
@@ -218,7 +222,7 @@ export function dataforseoPost<
  * gates its multi-MB body reads behind a parse lock in the audit worker, and
  * passes its own `signal` so the timeout can be cleared once headers arrive.
  */
-export function dataforseoPostResponse(
+export async function dataforseoPostResponse(
   path: string,
   tasks: unknown[],
   options: DataforseoRequestOptions & { signal?: AbortSignal } = {},
@@ -227,7 +231,7 @@ export function dataforseoPostResponse(
     options.classify,
     options.maxServerErrorRetries,
   );
-  return doFetch(`${API_BASE}${path}`, {
+  return doFetch(`${await dataforseoBase(API_BASE)}${path}`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(tasks),

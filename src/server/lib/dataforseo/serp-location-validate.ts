@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { dataforseoBase } from "@/server/lib/dataforseo/aios-adres";
 import { dataforseoPost } from "@/server/lib/dataforseo/core";
 import { invalidFieldName } from "@/server/lib/dataforseo/envelope";
 import { AppError } from "@/server/lib/errors";
@@ -17,7 +18,7 @@ const sandboxTaskSchema = z.object({
  * request fields exactly like production and costs nothing, so a 20000 here
  * means the live endpoint will take the name too.
  */
-export function probeSerpLocation(
+export async function probeSerpLocation(
   locationName: string,
   languageCode: string,
   options: { signal?: AbortSignal } = {},
@@ -32,7 +33,10 @@ export function probeSerpLocation(
         depth: 10,
       },
     ],
-    { baseUrl: DATAFORSEO_SANDBOX_URL, signal: options.signal },
+    {
+      baseUrl: await dataforseoBase(DATAFORSEO_SANDBOX_URL, true),
+      signal: options.signal,
+    },
   ).then((response) => sandboxTaskSchema.parse(response?.tasks?.[0]));
 }
 

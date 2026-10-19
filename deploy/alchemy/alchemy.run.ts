@@ -269,6 +269,9 @@ const dataEnv = {
   // AUTH_MODE, DATABASE_PROVIDER, BETTER_AUTH_URL, TEAM_DOMAIN, and
   // POLICY_AUD are stage-dependent and set in the stack body below.
   DATAFORSEO_API_KEY: Config.redacted("DATAFORSEO_API_KEY"),
+  // AI OS: route DataForSEO through our cost meter (src/server/lib/dataforseo/aios-adres.ts).
+  DATAFORSEO_API_URL: optionalVar("DATAFORSEO_API_URL"),
+  DATAFORSEO_SANDBOX_URL: optionalVar("DATAFORSEO_SANDBOX_URL"),
   BYPASS_EMAIL_VERIFICATION: optionalVar("BYPASS_EMAIL_VERIFICATION"),
   BETTER_AUTH_SECRET: optionalSecret("BETTER_AUTH_SECRET"),
   CRAWLER_ACCESS_SECRET: optionalSecret("CRAWLER_ACCESS_SECRET"),
@@ -407,6 +410,8 @@ export default Alchemy.Stack(
         CRAWLER_ACCESS_SECRET: dataEnv.CRAWLER_ACCESS_SECRET,
         CONTEXT_API_KEY: dataEnv.CONTEXT_API_KEY,
         DATAFORSEO_API_KEY: dataEnv.DATAFORSEO_API_KEY,
+        DATAFORSEO_API_URL: dataEnv.DATAFORSEO_API_URL,
+        DATAFORSEO_SANDBOX_URL: dataEnv.DATAFORSEO_SANDBOX_URL,
         AUTUMN_SECRET_KEY: dataEnv.AUTUMN_SECRET_KEY,
         POSTHOG_PUBLIC_KEY: dataEnv.POSTHOG_PUBLIC_KEY,
         POSTHOG_HOST: dataEnv.POSTHOG_HOST,
