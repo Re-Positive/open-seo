@@ -1,7 +1,7 @@
 // De kostenmeter van de module SEO (Re-Positive/seo-engine#16, spec #12). Elke installatie van open-seo
 // stuurt zijn DataForSEO-calls hierheen (DATAFORSEO_API_URL, schil-commit in de fork) met een
 // klanttoken als sleutel. De meter herkent de klant, stuurt de call met onze echte sleutel door, en
-// boekt wat DataForSEO rekende in seo.grootboek. Onze sleutel staat alleen hier.
+// boekt wat DataForSEO rekende in platform.usage_events (module seo) van het project AI OS. Onze sleutel staat alleen hier.
 //
 // Het klanttoken is base64("<client_id>:<hmac>"), met de HMAC-SHA256 over de client_id onder
 // METER_SLEUTEL. Zo hoeft de meter geen tokenlijst op te zoeken, en heeft een token dezelfde vorm als
@@ -153,6 +153,7 @@ async function boek(
     .filter((t) => typeof t.cost === "number" && t.cost > 0)
     .map((t) => ({
       client_id: clientId,
+      module: "seo",
       endpoint,
       bedrag: t.cost as number,
       taak_id: typeof t.id === "string" ? t.id : null,
@@ -160,13 +161,14 @@ async function boek(
   if (!regels.length && typeof body.cost === "number" && body.cost > 0) {
     regels.push({
       client_id: clientId,
+      module: "seo",
       endpoint,
       bedrag: body.cost,
       taak_id: null,
     });
   }
   if (regels.length) {
-    await sql`insert into seo.grootboek ${sql(regels, "client_id", "endpoint", "bedrag", "taak_id")}`;
+    await sql`insert into platform.usage_events ${sql(regels, "client_id", "module", "endpoint", "bedrag", "taak_id")}`;
   }
 }
 

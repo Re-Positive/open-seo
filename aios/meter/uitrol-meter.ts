@@ -1,7 +1,7 @@
 // Rolt de kostenmeter uit (seo-engine#16). Draaien vanuit de root van de fork, na grootboek-db.sh:
 //
 //   node aios/meter/uitrol-meter.ts sleutels    # eenmalig: METER_SLEUTEL en het DB-wachtwoord naar Doppler
-//   bash aios/meter/grootboek-db.sh             # grootboek en rol seo_meter op de portal-Supabase
+//   bash aios/meter/grootboek-db.sh             # wachtwoord van de rol seo_meter in het project AI OS
 //   node aios/meter/uitrol-meter.ts             # CA, Hyperdrive, secrets en deploy van de Worker
 //
 // Herhalen mag: wat er al staat, blijft staan.
@@ -13,9 +13,10 @@ import { cloudflare, dopplerGet, dopplerSet } from "../uitrol/cloudflare.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const HIER = fileURLToPath(new URL(".", import.meta.url));
-// De portal-Supabase waar os.resketch.nl en schema seo op draaien.
-const SUPABASE_REF = "hpbughfjwkvwzesphmyc";
-const POOLER = "aws-0-eu-west-3.pooler.supabase.com";
+// Het Supabase-project AI OS, met platform.usage_events en schema seo (Re-Positive/seo-engine, db/). De
+// pooler is aws-1, niet aws-0 zoals bij de portal. Dezelfde Supabase-CA geldt voor beide.
+const SUPABASE_REF = "zijulsquixmcqhlwsjym";
+const POOLER = "aws-1-eu-west-3.pooler.supabase.com";
 const CA_NAAM = "supabase-root-2021";
 const HYPERDRIVE_NAAM = "aios-seo-grootboek";
 const WORKER = "aios-seo-meter";

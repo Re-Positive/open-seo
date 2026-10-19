@@ -14,7 +14,7 @@
 //    met ons eigen Access (TEAM_DOMAIN + POLICY_AUD), dus zonder e-mailpolicy van open-seo.
 // 5. Een project per site (NL, nl) in de D1 van de installatie.
 // 6. De Worker-URL naar Doppler, en de toets: zonder token 403, met token laadt /seo.
-// 7. Klant en site in schema seo van de AI OS (seo.klant, seo.site), zodat de SEO-poort ze kent.
+// 7. Klant en site in de AI OS (platform.klanten, seo.installatie, seo.site), zodat de SEO-poort ze kent.
 //
 // `bijwerken <tag>` (seo-engine#20) merget een release van open-seo in de fork, draait de tests,
 // zet nieuwe teksten klaar in de woordenlijst, rolt uit bij Re:Positive met de rooktest door de SEO-poort,
@@ -237,11 +237,17 @@ async function zorgVoorProject(stage: string, domein: string): Promise<string> {
   return String(project.id);
 }
 
+// De klant in platform.klanten (de naam) en zijn installatie in seo.installatie. Een boeking van de meter
+// voor een klant die niet in platform.klanten staat, weigert de database.
 function registreerKlant(klant: string, naam: string, url: string) {
   aiOsSql(
-    `insert into seo.klant (client_id, naam, installatie_url) values (:'client_id', :'naam', :'url')
-     on conflict (client_id) do update set naam = excluded.naam, installatie_url = excluded.installatie_url
-     returning client_id;`,
+    `begin;
+     insert into platform.klanten (client_id, naam) values (:'client_id', :'naam')
+     on conflict (client_id) do update set naam = excluded.naam;
+     insert into seo.installatie (client_id, installatie_url) values (:'client_id', :'url')
+     on conflict (client_id) do update set installatie_url = excluded.installatie_url
+     returning client_id;
+     commit;`,
     { client_id: klant, naam, url },
   );
 }
@@ -250,14 +256,14 @@ function registreerSite(klant: string, domein: string, projectId: string) {
   const [rij] = aiOsSql(
     `insert into seo.site (client_id, domein, project_id)
      select :'client_id', :'domein', :'project_id'
-      where exists (select 1 from seo.klant where client_id = :'client_id')
+      where exists (select 1 from seo.installatie where client_id = :'client_id')
      on conflict (client_id, domein) do update set project_id = excluded.project_id
      returning domein || ' ' || project_id;`,
     { client_id: klant, domein, project_id: projectId },
   );
   if (!rij) {
     throw new Error(
-      `Klant ${klant} staat niet in seo.klant van de AI OS; draai eerst \`nieuwe klant ${klant}\`.`,
+      `Klant ${klant} staat niet in seo.installatie van de AI OS; draai eerst \`nieuwe klant ${klant}\`.`,
     );
   }
 }
@@ -447,9 +453,9 @@ async function bijwerken(tag: string) {
     );
   }
 
-  // 5. Daarna de andere klanten (seo.klant in de AI OS), met dezelfde build.
+  // 5. Daarna de andere klanten (seo.installatie in de AI OS), met dezelfde build.
   const anderen = aiOsSql(
-    "select client_id from seo.klant where client_id <> :'eerst' order by client_id;",
+    "select client_id from seo.installatie where client_id <> :'eerst' order by client_id;",
     { eerst: EERST },
   );
   for (const klant of anderen) await deployKlant(klant, false);
@@ -465,7 +471,7 @@ async function bijwerken(tag: string) {
 }
 
 // Welke Engelse teksten gebruikers het vaakst zagen, over alle klanten heen (seo-engine#21). De schil
-// meldt ze aan de SEO-poort, die ze per klant in seo.gemiste_tekst zet (migratie 014 in de AI OS).
+// meldt ze aan de SEO-poort, die ze per klant in seo.gemiste_tekst zet (db/seo/002 in Re-Positive/seo-engine).
 // "onvertaald" staat in de woordenlijst zonder vertaling; "onbekend" staat er niet in.
 function gemist(aantal: number) {
   const rijen = aiOsSql(

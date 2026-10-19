@@ -1,5 +1,6 @@
 // Gedeelde opzet voor de tests van de kostenmeter (naad 2, seo-engine#12, #16 en #17): een nep-DataForSEO
-// en een wegwerp-Postgres als grootboek, waarop de meter met zijn eigen smalle rol seo_meter schrijft.
+// en een wegwerp-Postgres met de schema's van AI OS, waarop de meter met zijn eigen smalle rol seo_meter
+// boekt in platform.usage_events.
 // Slaat zichzelf over zonder postgresql@17.
 import { after, before } from "node:test";
 import { execFileSync } from "node:child_process";
@@ -15,6 +16,7 @@ const PGBIN = "/opt/homebrew/opt/postgresql@17/bin";
 // Elk testbestand draait in een eigen proces: een eigen poort per proces.
 const POORT = String(5400 + (process.pid % 500));
 const HIER = path.dirname(new URL(import.meta.url).pathname);
+const MIGREER = path.join(HIER, "../../../seo-engine/db/migreer.py");
 export const ONZE_SLEUTEL = Buffer.from("wij@repositive.nl:geheim").toString(
   "base64",
 );
@@ -115,23 +117,21 @@ before(async () => {
   const url = `postgres://test@127.0.0.1:${POORT}/postgres`;
   execFileSync(
     `${PGBIN}/psql`,
-    [url, "-X", "-q", "-c", "create role anon; create role authenticated"],
+    [
+      url,
+      "-X",
+      "-q",
+      "-c",
+      "create role anon; create role authenticated; create role service_role",
+    ],
     { stdio: "ignore" },
   );
+  // De schema's platform en seo van het project AI OS, uit Re-Positive/seo-engine (db/), twee keer: idempotent.
   for (let i = 0; i < 2; i++) {
-    execFileSync(
-      `${PGBIN}/psql`,
-      [
-        url,
-        "-X",
-        "-q",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-f",
-        path.join(HIER, "grootboek.sql"),
-      ],
-      { stdio: "ignore" },
-    );
+    execFileSync("/opt/homebrew/bin/python3.12", [MIGREER, "platform", "seo"], {
+      env: { ...process.env, DB_URL: url, PSQL: `${PGBIN}/psql` },
+      stdio: "ignore",
+    });
   }
   eigenaar = postgres(url, { max: 1, onnotice: () => {} });
   sql = postgres(`postgres://seo_meter@127.0.0.1:${POORT}/postgres`, {
@@ -149,6 +149,9 @@ before(async () => {
       meldingen.push(tekst);
     },
   };
+  // Een boeking hoort bij een klant in platform.klanten (foreign key).
+  await eigenaar`insert into platform.klanten (client_id, naam)
+    values ('86c7h8f96', 'Re:Positive'), ('geenbudget', 'geenbudget'), ('melder', 'melder'), ('volbudget', 'volbudget')`;
   await eigenaar`insert into seo.budget (client_id, maandbedrag) values ('86c7h8f96', 20)`;
 });
 
@@ -189,5 +192,5 @@ export async function vraag(
 }
 
 export async function grootboek() {
-  return eigenaar`select client_id, endpoint, bedrag::text, taak_id from seo.grootboek order by id`;
+  return eigenaar`select client_id, endpoint, bedrag::text, taak_id from platform.usage_events where module = 'seo' order by id`;
 }

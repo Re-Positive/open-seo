@@ -51,8 +51,9 @@ node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
   (`TEAM_DOMAIN` + `POLICY_AUD`) in plaats van de e-mailpolicy van open-seo.
 - De installatie krijgt nooit onze DataForSEO-sleutel, maar een klanttoken en het adres van de kostenmeter.
 - Telemetrie staat uit. Herhalen mag: wat er al staat, blijft staan.
-- Beide schrijven klant en site naar schema `seo` van de AI OS (`seo.klant`, `seo.site`, in de
-  portal-Supabase van os.resketch.nl). psql draait daarvoor vanuit `02-resketch/OtherWorlds/ai-os-beheer`
+- Beide schrijven klant en site naar het Supabase-project AI OS (`platform.klanten`, `seo.installatie`,
+  `seo.site`; migraties in Re-Positive/seo-engine, `db/`). Alleen de klantnaam van een Resketch-klant komt
+  nog uit `tenants` in de portal-Supabase. psql draait daarvoor vanuit `02-resketch/OtherWorlds/ai-os-beheer`
   met Doppler `resketch-ai/prd`, want het Doppler-token is per map gescoped. Waarden gaan als
   psql-variabelen mee, nooit in de SQL-tekst. Wie de klant ziet (`seo.gebruiker`) blijft handwerk.
 - `nieuwe site` (seo-engine#18) voegt een project (NL, nl) toe in de D1 van een bestaande installatie en
@@ -80,7 +81,7 @@ node aios/uitrol/uitrol.ts bijwerken <tag>     # bv. v0.1.14
 3. De woordenlijst: `open-seo-lokaal/schil/teksten.mjs --schrijf` zet nieuwe Engelse teksten met een lege
    waarde in `nl.json`. Vertaal ze daar en maak daarna `public/seo-schil/nl.js` in ai-os-beheer opnieuw.
 4. Uitrollen bij Re:Positive (`86c7h8f96`) en de rooktest (`aios/tests-live/rooktest.spec.ts`).
-5. Slaagt die, dan dezelfde build bij de andere klanten uit `seo.klant`. Faalt hij, dan blijven zij op
+5. Slaagt die, dan dezelfde build bij de andere klanten uit `seo.installatie`. Faalt hij, dan blijven zij op
    de vorige versie.
 6. De fork naar origin, en de top 15 van de gemiste teksten.
 
@@ -120,18 +121,18 @@ Draaien: `pnpm exec playwright test -c aios/playwright.config.ts` (bouwt eerst, 
 - herkent de klant aan het klanttoken, `base64(<client_id>:<HMAC onder SEO_METER_SLEUTEL>)`, zonder
   een tokenlijst;
 - stuurt de call door met onze sleutel;
-- boekt elke taak met `cost > 0` in `seo.grootboek` op de portal-Supabase. Dat boeken gebeurt na het
+- boekt elke taak met `cost > 0` in `platform.usage_events` (module `seo`) in het project AI OS. Dat boeken gebeurt na het
   antwoord (`waitUntil`). Gratis calls en de sandbox worden niet geboekt.
 
 Het grootboek is append-only: een trigger weigert update, delete en truncate. De rol `seo_meter` mag
-alleen invoegen (RLS). De Worker bereikt Supabase via Hyperdrive, met `verify-full` tegen de CA van
+alleen invoegen, en alleen met module `seo` (RLS). Een boeking hoort bij een klant in `platform.klanten`. De Worker bereikt Supabase via Hyperdrive, met `verify-full` tegen de CA van
 Supabase (`supabase-ca.pem`).
 
 Uitrollen, eenmalig en daarna herhaalbaar:
 
 ```bash
 node aios/meter/uitrol-meter.ts sleutels   # SEO_METER_SLEUTEL en SEO_METER_DB_WACHTWOORD in Doppler
-bash aios/meter/grootboek-db.sh            # grootboek en rol op de portal-Supabase
+bash aios/meter/grootboek-db.sh            # migraties en het wachtwoord van seo_meter in AI OS
 node aios/meter/uitrol-meter.ts            # CA, Hyperdrive, Worker met secrets, SEO_METER_URL
 ```
 

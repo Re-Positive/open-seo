@@ -1,6 +1,8 @@
-// De naad van de uitrol naar de AI OS (os.resketch.nl, Resketch-ai/ai-os-beheer): schema seo in zijn
-// database, en een sessie voor de rooktest. De database-URL en de sessiesleutel staan in Doppler
-// resketch-ai, en het Doppler-token is per map gescoped: daarom draait alles vanuit die map.
+// De naad van de uitrol naar de AI OS (os.resketch.nl, Resketch-ai/ai-os-beheer): de schema's platform en
+// seo in het Supabase-project AI OS (migraties in Re-Positive/seo-engine, db/), en een sessie voor de
+// rooktest. De klanten van de portal (public.tenants) staan nog in de portal-Supabase. De database-URL's en
+// de sessiesleutel staan in Doppler resketch-ai, en het Doppler-token is per map gescoped: daarom draait
+// alles vanuit die map.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -12,9 +14,20 @@ export const AI_OS = fileURLToPath(
 );
 const PSQL = "/opt/homebrew/opt/libpq/bin/psql";
 
-// SQL naar schema seo van de AI OS. De waarden gaan als psql-variabelen mee (`:'naam'`), nooit in de
-// tekst van de SQL. Geeft de regels van `returning` terug.
-export function aiOsSql(sql: string, waarden: Record<string, string>) {
+const DATABASE = {
+  // Het project AI OS, eigenaarsrol, al in pooler-vorm.
+  aiOs: '"$AI_OS_PLATFORM_DB_URL"',
+  // De portal-Supabase, alleen nog voor public.tenants.
+  portal: '"$(scripts/db-url.py "$CLIENT_PORTAL_DB_URL")"',
+};
+
+// SQL naar de AI OS (of, met `portal`, naar de portal-Supabase). De waarden gaan als psql-variabelen mee
+// (`:'naam'`), nooit in de tekst van de SQL. Geeft de regels van `returning` terug.
+export function aiOsSql(
+  sql: string,
+  waarden: Record<string, string>,
+  database: keyof typeof DATABASE = "aiOs",
+) {
   const vars = Object.keys(waarden).flatMap((naam, i) => [
     "-v",
     `${naam}=\${${i + 1}}`,
@@ -30,7 +43,7 @@ export function aiOsSql(sql: string, waarden: Record<string, string>) {
       "--",
       "bash",
       "-c",
-      `exec ${PSQL} "$(scripts/db-url.py "$CLIENT_PORTAL_DB_URL")" -X -q -At -v ON_ERROR_STOP=1 ${vars
+      `exec ${PSQL} ${DATABASE[database]} -X -q -At -v ON_ERROR_STOP=1 ${vars
         .map((v) => (v === "-v" ? v : `"${v}"`))
         .join(" ")}`,
       "aios-sql",
@@ -40,7 +53,7 @@ export function aiOsSql(sql: string, waarden: Record<string, string>) {
   );
   if (uitkomst.status !== 0) {
     throw new Error(
-      `schema seo: ${uitkomst.stderr.trim() || `exit ${uitkomst.status}`}`,
+      `${database === "aiOs" ? "AI OS" : "portal"}: ${uitkomst.stderr.trim() || `exit ${uitkomst.status}`}`,
     );
   }
   return uitkomst.stdout.trim().split("\n").filter(Boolean);

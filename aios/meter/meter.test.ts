@@ -118,12 +118,12 @@ test(
   "de rol van de meter mag alleen boeken: niet lezen, niet wijzigen, niet wissen",
   { skip: !heeftPostgres },
   async () => {
-    await assert.rejects(sql`select * from seo.grootboek`, /permission denied/);
+    await assert.rejects(sql`select * from platform.usage_events`, /permission denied/);
     await assert.rejects(
-      sql`update seo.grootboek set bedrag = 0`,
+      sql`update platform.usage_events set bedrag = 0`,
       /permission denied/,
     );
-    await assert.rejects(sql`delete from seo.grootboek`, /permission denied/);
+    await assert.rejects(sql`delete from platform.usage_events`, /permission denied/);
   },
 );
 
@@ -132,10 +132,10 @@ test(
   { skip: !heeftPostgres },
   async () => {
     await assert.rejects(
-      eigenaar`update seo.grootboek set bedrag = 1`,
+      eigenaar`update platform.usage_events set bedrag = 1`,
       /append-only/,
     );
-    await assert.rejects(eigenaar`delete from seo.grootboek`, /append-only/);
-    await assert.rejects(eigenaar`truncate seo.grootboek`, /append-only/);
+    await assert.rejects(eigenaar`delete from platform.usage_events`, /append-only/);
+    await assert.rejects(eigenaar`truncate platform.usage_events`, /append-only/);
   },
 );

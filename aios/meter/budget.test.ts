@@ -39,7 +39,7 @@ test(
     );
     assert.equal(gezien.length, 0, "DataForSEO wordt niet bereikt");
     const [{ n }] =
-      await eigenaar`select count(*)::int as n from seo.grootboek where client_id = 'volbudget'`;
+      await eigenaar`select count(*)::int as n from platform.usage_events where client_id = 'volbudget'`;
     assert.equal(n, 2, "alleen de eerste call is geboekt (twee taken)");
   },
 );

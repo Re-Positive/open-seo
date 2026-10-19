@@ -144,6 +144,7 @@ function uitTenants(klant: string) {
     `select name || chr(9) || coalesce(website, '') from public.tenants
       where replace(subdomain, '-', '_') = :'klant' and status = 'active';`,
     { klant },
+    "portal",
   );
   if (!rij) return null;
   const [naam, website] = rij.split("\t");
