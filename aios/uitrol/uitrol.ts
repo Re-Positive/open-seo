@@ -1,7 +1,7 @@
 // De uitrol van de module SEO: per klant een eigen installatie van deze fork op Cloudflare
 // (seo-engine#12, ADR-0008). Draaien vanuit de root van de fork:
 //
-//   node aios/uitrol/uitrol.ts nieuwe klant <client_id>
+//   node aios/uitrol/uitrol.ts nieuwe klant <client_id> [eerste domein]
 //   node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
 //   node aios/uitrol/uitrol.ts bijwerken <tag>
 //   node aios/uitrol/uitrol.ts gemist [aantal]
@@ -280,8 +280,12 @@ async function toets(url: string, clientId: string, clientSecret: string) {
   }
 }
 
-async function nieuweKlant(klant: string) {
-  const { naam, domein } = await klantVan(klant);
+// `domein` kiest de eerste site als de website van de klant niet de site is die SEO krijgt, zoals bij
+// EVD (evd-group.nl): `nieuwe klant evd_group lumenix-beamers.nl`, daarna `nieuwe site` voor de rest.
+async function nieuweKlant(klant: string, eersteSite?: string) {
+  const gegevens = await klantVan(klant);
+  const naam = gegevens.naam;
+  const domein = eersteSite ? domeinVan(eersteSite) : gegevens.domein;
   const stage = stageVan(klant);
   const { subdomain } = await cloudflare<{ subdomain: string }>(
     "/workers/subdomain",
@@ -482,7 +486,7 @@ function gemist(aantal: number) {
 
 const [opdracht, soort, klant, domein] = process.argv.slice(2);
 if (opdracht === "nieuwe" && soort === "klant" && klant) {
-  await nieuweKlant(klant);
+  await nieuweKlant(klant, domein);
 } else if (opdracht === "nieuwe" && soort === "site" && klant && domein) {
   await nieuweSite(klant, domein);
 } else if (opdracht === "bijwerken" && soort) {
@@ -491,7 +495,7 @@ if (opdracht === "nieuwe" && soort === "klant" && klant) {
   gemist(Number(soort ?? 50));
 } else {
   console.error(
-    "Gebruik: node aios/uitrol/uitrol.ts nieuwe klant <client_id>\n" +
+    "Gebruik: node aios/uitrol/uitrol.ts nieuwe klant <client_id> [eerste domein]\n" +
       "         node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>\n" +
       "         node aios/uitrol/uitrol.ts bijwerken <tag>\n" +
       "         node aios/uitrol/uitrol.ts gemist [aantal]",

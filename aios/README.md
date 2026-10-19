@@ -35,11 +35,14 @@ Spec: Re-Positive/seo-engine#12.
 `aios/uitrol/uitrol.ts` zet per klant een eigen installatie op Cloudflare (Worker, D1, KV, R2):
 
 ```bash
-node aios/uitrol/uitrol.ts nieuwe klant <client_id>    # bv. 86c7h8f96 voor Re:Positive
+node aios/uitrol/uitrol.ts nieuwe klant <client_id> [eerste domein]   # bv. 86c7h8f96 voor Re:Positive
 node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
 ```
 
-- Klant en site komen uit `clients` van het client-dashboard (zelfde `client_id`, ADR-0005 in seo-engine).
+- Klant en site komen uit `clients` van het client-dashboard (zelfde `client_id`, ADR-0005 in seo-engine),
+  of voor een klant van Resketch uit `tenants` van de portal. Daar is de `client_id` het subdomein met `_`
+  in plaats van `-`, bv. `evd_group` (seo-engine#19). Is de website van de klant niet de site die SEO krijgt,
+  geef dan de eerste site mee: `nieuwe klant evd_group lumenix-beamers.nl`.
 - Cloudflare-gegevens uit Doppler `repositive-ai/prd`: `CLOUDFLARE_API_TOKEN` (Workers, D1, KV, R2,
   Access-apps en -servicetokens, Secrets Store), `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_TEAM`.
 - Per klant schrijft hij naar Doppler: `SEO_<ID>_URL`, `SEO_<ID>_ACCESS_CLIENT_ID`,

@@ -1,6 +1,7 @@
 // De naden van de uitrol naar buiten: Doppler (geheimen), de Cloudflare-API en het
 // client-dashboard (klantgegevens). Gedeeld door de uitrol en de live-tests.
 import { execFileSync } from "node:child_process";
+import { aiOsSql } from "./aios.ts";
 
 const DOPPLER = ["-p", "repositive-ai", "-c", "prd"];
 
@@ -103,8 +104,23 @@ export async function d1Query(
   return uitkomst.results;
 }
 
-/** Naam en site van een klant, uit `clients` in het client-dashboard (dezelfde client_id, ADR-0005). */
+/**
+ * Naam en site van een klant. Klanten van Re:Positive staan in `clients` van het client-dashboard (zelfde
+ * client_id, ADR-0005); klanten van Resketch, zoals EVD, in `tenants` van de portal (seo-engine#19), met
+ * als client_id het subdomein met `_` in plaats van `-` (`evd-group` wordt `evd_group`).
+ */
 export async function klantVan(klant: string) {
+  const rij = (await uitClientDashboard(klant)) ?? uitTenants(klant);
+  if (!rij)
+    throw new Error(
+      `Klant ${klant} staat niet in clients van het client-dashboard en niet in tenants van de portal.`,
+    );
+  if (!rij.website)
+    throw new Error(`Klant ${klant} (${rij.naam}) heeft geen website.`);
+  return { naam: rij.naam, domein: domeinVan(rij.website) };
+}
+
+async function uitClientDashboard(klant: string) {
   // De URL in Doppler kan al een pad hebben (/rest/v1); alleen de origin telt.
   const basis = new URL(vereist("CLIENT_DASHBOARD_SUPABASE_URL")).origin;
   const sleutel = vereist("CLIENT_DASHBOARD_SUPABASE_SERVICE_ROLE_KEY");
@@ -120,15 +136,18 @@ export async function klantVan(klant: string) {
     name: string;
     website: string | null;
   }[];
-  if (!rij)
-    throw new Error(
-      `Klant ${klant} staat niet in clients van het client-dashboard.`,
-    );
-  if (!rij.website)
-    throw new Error(
-      `Klant ${klant} (${rij.name}) heeft geen website in clients.`,
-    );
-  return { naam: rij.name, domein: domeinVan(rij.website) };
+  return rij ? { naam: rij.name, website: rij.website } : null;
+}
+
+function uitTenants(klant: string) {
+  const [rij] = aiOsSql(
+    `select name || chr(9) || coalesce(website, '') from public.tenants
+      where replace(subdomain, '-', '_') = :'klant' and status = 'active';`,
+    { klant },
+  );
+  if (!rij) return null;
+  const [naam, website] = rij.split("\t");
+  return { naam, website: website || null };
 }
 
 /** Het domein van een site zoals de AI OS het bewaart (`seo.site.domein`): kleine letters, zonder www. */
