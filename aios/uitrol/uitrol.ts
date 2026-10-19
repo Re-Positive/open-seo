@@ -23,15 +23,11 @@ import {
   klantVan,
   stageVan,
 } from "./cloudflare.ts";
+import { klanttoken } from "../meter/meter.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // DataForSEO: Nederland en Nederlands.
 const NL = { locationCode: 2528, languageCode: "nl" };
-// De installatie krijgt nooit onze DataForSEO-sleutel (spec #12): betaalde calls lopen straks via de
-// kostenmeter met een klanttoken (#16). Tot dan staat hier een sleutel die DataForSEO weigert.
-const GEEN_DATAFORSEO_SLEUTEL = Buffer.from(
-  "geen-sleutel:zie-seo-engine-16",
-).toString("base64");
 // Waar open-seo de gedeelde werkruimte van een Access-installatie bewaart (delegated-organization.ts).
 const WERKRUIMTE = "shared-workspace";
 
@@ -121,11 +117,25 @@ async function zorgVoorAccessApp(
       });
 }
 
+// De installatie krijgt nooit onze DataForSEO-sleutel (spec #12): alle calls gaan naar de kostenmeter
+// (aios/meter), met een klanttoken als sleutel. De meter boekt per klant en stuurt door.
+async function meterVoor(klant: string) {
+  const url = dopplerGet("SEO_METER_URL");
+  const sleutel = dopplerGet("SEO_METER_SLEUTEL");
+  if (!url || !sleutel) {
+    throw new Error(
+      "De kostenmeter staat er nog niet: draai eerst aios/meter/uitrol-meter.ts.",
+    );
+  }
+  return { url, token: await klanttoken(sleutel, klant) };
+}
+
 function bouwEnDeploy(
   stage: string,
   subdomein: string,
   aud: string,
   heeftStateStore: boolean,
+  meter: { url: string; token: string },
 ) {
   const teamDomein = `https://${dopplerGet("CLOUDFLARE_ACCESS_TEAM")}.cloudflareaccess.com`;
   const envBestand = `.env.uitrol-${stage}`;
@@ -137,7 +147,9 @@ function bouwEnDeploy(
   writeFileSync(
     `${ROOT}/${envBestand}`,
     [
-      `DATAFORSEO_API_KEY=${GEEN_DATAFORSEO_SLEUTEL}`,
+      `DATAFORSEO_API_KEY=${meter.token}`,
+      `DATAFORSEO_API_URL=${meter.url}`,
+      `DATAFORSEO_SANDBOX_URL=${meter.url}/sandbox`,
       "AUTH_MODE=cloudflare_access",
       `TEAM_DOMAIN=${teamDomein}`,
       `POLICY_AUD=${aud}`,
@@ -238,6 +250,7 @@ async function nieuweKlant(klant: string) {
     subdomein,
     app.aud,
     workers.some((w) => w.id === "alchemy-state-store"),
+    await meterVoor(klant),
   );
   await zorgVoorProject(stage, domein);
 

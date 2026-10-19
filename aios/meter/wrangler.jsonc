@@ -7,5 +7,5 @@
   "workers_dev": true,
   "preview_urls": false,
   "observability": { "enabled": true },
-  "hyperdrive": [{ "binding": "GROOTBOEK", "id": "VUL_IN_DOOR_UITROL" }]
+  "hyperdrive": [{ "binding": "GROOTBOEK", "id": "3d376da8a6c147dda61db352a36efb11" }]
 }
