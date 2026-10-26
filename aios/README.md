@@ -45,6 +45,9 @@ node aios/uitrol/uitrol.ts nieuwe site <client_id> <domein>
   geef dan de eerste site mee: `nieuwe klant evd_group lumenix-beamers.nl`.
 - Cloudflare-gegevens uit Doppler `repositive-ai/prd`: `CLOUDFLARE_API_TOKEN` (Workers, D1, KV, R2,
   Access-apps en -servicetokens, Secrets Store), `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_TEAM`.
+  Alleen lezen (logs van de workers, facturering): `CLOUDFLARE_READ_API_TOKEN`.
+- Het account moet op Workers Paid staan. Onder Free krijgt een audit maximaal 50 subrequests per aanroep,
+  en een Worker-versie die onder Free is geüpload, houdt die limiet ook na de upgrade (26-10, werk#582).
 - Per klant schrijft hij naar Doppler: `SEO_<ID>_URL`, `SEO_<ID>_ACCESS_CLIENT_ID`,
   `SEO_<ID>_ACCESS_CLIENT_SECRET`.
 - De Access-applicatie laat alleen het servicetoken van die klant door; de deploy gebruikt die app
