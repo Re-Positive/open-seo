@@ -388,11 +388,10 @@ export default Alchemy.Stack(
       },
       // Audit workflow steps parse and persist batches of HTML — the same
       // CPU allowance the app worker used to carry for them. Configurable
-      // CPU limits are a paid-plan feature; self-host deploys
-      // (cloudflare_access) may run on the free plan, which rejects them.
-      ...(authMode === "cloudflare_access"
-        ? {}
-        : { limits: { cpuMs: 300_000 } }),
+      // CPU limits are a paid-plan feature. Our self-host accounts run on
+      // Workers Paid: a version uploaded on Free keeps the 50-subrequest
+      // cap, which one audit invocation (crawl plus Lighthouse) exceeds.
+      limits: { cpuMs: 300_000 },
       observability: {
         enabled: wrangler.observability?.enabled ?? true,
         traces: { enabled: wrangler.observability?.traces?.enabled ?? false },
