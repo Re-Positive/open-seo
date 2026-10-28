@@ -166,13 +166,25 @@ function googleVoor(klant: string) {
   ];
 }
 
+// Shopify-crawlersignaturen (werk#582): zonder dit geheim weigert de installatie een signatuur op te slaan
+// en houdt Shopify de crawler tegen met 429. Ontstaat één keer per klant, zoals het Google-geheim.
+function crawlerVoor(klant: string) {
+  const naam = dopplerNamen(klant).crawlerSecret;
+  let geheim = dopplerGet(naam);
+  if (!geheim) {
+    geheim = randomBytes(32).toString("hex");
+    dopplerSet(naam, geheim);
+  }
+  return [`CRAWLER_ACCESS_SECRET=${geheim}`];
+}
+
 function bouwEnDeploy(
   stage: string,
   subdomein: string,
   aud: string,
   heeftStateStore: boolean,
   meter: { url: string; token: string },
-  google: string[],
+  geheimen: string[],
   bouwen = true,
 ) {
   const teamDomein = `https://${dopplerGet("CLOUDFLARE_ACCESS_TEAM")}.cloudflareaccess.com`;
@@ -193,7 +205,7 @@ function bouwEnDeploy(
       `POLICY_AUD=${aud}`,
       `WORKERS_SUBDOMAIN=${subdomein}`,
       "OPENSEO_TELEMETRY_DISABLED=1",
-      ...google,
+      ...geheimen,
       "",
     ].join("\n"),
     { mode: 0o600 },
@@ -336,7 +348,7 @@ async function nieuweKlant(klant: string, eersteSite?: string) {
     app.aud,
     workers.some((w) => w.id === "alchemy-state-store"),
     await meterVoor(klant),
-    googleVoor(klant),
+    [...googleVoor(klant), ...crawlerVoor(klant)],
   );
   const projectId = await zorgVoorProject(stage, domein);
 
@@ -401,7 +413,7 @@ async function deployKlant(klant: string, bouwen: boolean) {
     app.aud,
     true,
     await meterVoor(klant),
-    googleVoor(klant),
+    [...googleVoor(klant), ...crawlerVoor(klant)],
     bouwen,
   );
   await toets(installatie.url, installatie.clientId, installatie.clientSecret);

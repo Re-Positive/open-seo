@@ -78,6 +78,8 @@ export function dopplerNamen(klant: string) {
     // Versleutelt de Google-tokens in de installatie (BETTER_AUTH_SECRET). Blijft gelijk over deploys:
     // een nieuw geheim maakt elke opgeslagen koppeling onleesbaar.
     authSecret: `SEO_${id}_AUTH_SECRET`,
+    // Versleutelt de Shopify-crawlersignaturen (CRAWLER_ACCESS_SECRET). Blijft om dezelfde reden gelijk.
+    crawlerSecret: `SEO_${id}_CRAWLER_SECRET`,
   };
 }
 
